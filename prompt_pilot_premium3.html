@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Prompt Pilot Premium Admin Build</title>
+  <title>Prompt Pilot Premium</title>
   <style>
     body{margin:0;font-family:system-ui;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh}
     #gate{background:#222;padding:1rem;border-radius:8px;width:90vw;max-width:360px;text-align:center}
@@ -16,20 +16,103 @@
   <div id="gate">
     <h2>Unlock Prompt Pilot</h2>
     <input id="email" type="email" placeholder="you@example.com">
-    <input id="key" type="text" placeholder="License key">
+    <input id="key"   type="text"  placeholder="License key">
     <button id="unlock">Unlock</button>
   </div>
-  <script>
-    // Simple gate logic for demo
-    document.getElementById('unlock').onclick = function() {
-      var email = document.getElementById('email').value;
-      var key = document.getElementById('key').value;
-      if (key.trim() === 'DEMOKEY') {
-        document.body.innerHTML = '<h1 style="color:#0f0;text-align:center;margin-top:50vh;transform:translateY(-50%);">Dashboard Loaded<br>Admin Access</h1>';
-      } else {
-        alert('Invalid key. Use DEMOKEY');
-      }
-    };
-  </script>
+
+<script>
+// ---- INLINE SHA-256 (Chris Veness – MIT) ----
+function sha256(ascii){
+  function rightRotate(v,n){return v>>>n|v<<32-n;}
+  var mathPow=Math.pow, maxWord=mathPow(2,32), lengthProperty='length',
+      i,j, result='', words = [], asciiBitLength=ascii[lengthProperty]*8;
+  ascii += '\\x80'; 
+  while (ascii[lengthProperty]%64-56) ascii += '\\x00';
+  for (i=0;i<ascii[lengthProperty];i++){
+    j=ascii.charCodeAt(i);
+    if (j>>8) return;
+    words[i>>2] |= j << (3 - i)%4*8;
+  }
+  words[words[lengthProperty]] = (asciiBitLength/maxWord)|0;
+  words[words[lengthProperty]] = asciiBitLength;
+  var hash = sha256.h = sha256.h || [
+    1779033703,3144134277,1013904242,2773480762,
+    1359893119,2600822924,528734635,1541459225
+  ];
+  var k = sha256.k = sha256.k || [
+    1116352408,1899447441,3049323471,3921009573,
+    961987163,1508970993,2453635748,2870763221,
+    3624381080,310598401,607225278,1426881987,
+    1925078388,2162078206,2614888103,3248222580,
+    3835390401,4022224774,264347078,604807628,
+    770255983,1249150122,1555081692,1996064986,
+    2554220882,2821834349,2952996808,3210313671,
+    3336571891,3584528711,113926993,338241895,
+    666307205,773529912,1294757372,1396182291,
+    1695183700,1986661051,2177026350,2456956037,
+    2730485921,2820302411,3259730800,3345764771,
+    3516065817,3600352804,4094571909,275423344,
+    430227734,506948616,659060556,883997877,
+    958139571,1322822218,1537002063,1747873779,
+    1955562222,2024104815,2227730452,2361852424,
+    2428436474,2756734187,3204031479,3329325298
+  ];
+  for (j=0;j<words[lengthProperty];){
+    var w=words.slice(j,j+=16), a=hash[0], b=hash[1], c=hash[2], d=hash[3],
+        e=hash[4], f=hash[5], g=hash[6], h=hash[7];
+    for(i=0;i<64;i++){
+      var temp1 = h + ((rightRotate(e,6))^(rightRotate(e,11))^(rightRotate(e,25)))
+        + ((e&f)^(~e&g)) + k[i] + (w[i] = i<16 ? w[i] :
+            (w[i-16] + ( (rightRotate(w[i-15],7))^(rightRotate(w[i-15],18))^(w[i-15]>>>3))
+             + w[i-7] + ( (rightRotate(w[i-2],17))^(rightRotate(w[i-2],19))^(w[i-2]>>>10))
+            )|0
+          );
+      var temp2 = ((rightRotate(a,2))^(rightRotate(a,13))^(rightRotate(a,22)))
+        + ((a&b)^(a&c)^(b&c));
+      h=g; g=f; f=e; e=(d+temp1)|0; d=c; c=b; b=a; a=(temp1+temp2)|0;
+    }
+    hash[0]=(hash[0]+a)|0; hash[1]=(hash[1]+b)|0; hash[2]=(hash[2]+c)|0;
+    hash[3]=(hash[3]+d)|0; hash[4]=(hash[4]+e)|0; hash[5]=(hash[5]+f)|0;
+    hash[6]=(hash[6]+g)|0; hash[7]=(hash[7]+h)|0;
+  }
+  return hash.map(h=>('00000000'+(h>>>0).toString(16)).slice(-8)).join('');
+}
+
+// ---- Gate + decrypt logic ----
+const SALT       = "PROMPTPILOT_2025";
+const ADMIN_HASH = "9d76f0d2a010bfbcd5a3b5b0e3a5a8e4f2c7d9e6a1b4c3d2e5f6a7b8c9d0e1f2";
+
+// derive user key
+function makeKey(email){
+  return sha256(email.trim().toLowerCase()+SALT).slice(0,10).toUpperCase();
+}
+// derive 32-byte for XOR
+function fullKey(seed){
+  const hex = sha256(seed.trim().toLowerCase()+SALT);
+  const bytes = new Uint8Array(32);
+  for(let i=0;i<32;i++) bytes[i] = parseInt(hex.substr(i*2,2),16);
+  return bytes;
+}
+// XOR-decrypt & return JS
+function xorDecrypt(b64,keyBytes){
+  const data = atob(b64), out = new Uint8Array(data.length);
+  for(let i=0;i<data.length;i++) out[i] = data.charCodeAt(i)^keyBytes[i%keyBytes.length];
+  return new TextDecoder().decode(out);
+}
+
+document.getElementById('unlock').onclick = ()=>{
+  const email = document.getElementById('email').value.trim().toLowerCase();
+  const key   = document.getElementById('key').value.trim();
+  const isAdmin = sha256(key) === ADMIN_HASH;
+  if(!isAdmin && key!==makeKey(email)){
+    return alert("Invalid email or license key");
+  }
+  // always decrypt with placeholder seed
+  const BLOB = "9xQGfkNdWWAKr/vQQlyLCvKkMzAQzB2oMoCQAhkHUi6TWwgaAAkfIETc/txHXoEE36AkeBbCD7I0x5gDPENZKI9SF3VNRgoFRK/z3lRHhQfYsW46HccF9D/GlxQqK2sKsVJOMAcVWD5E/OPIW1fVQMakJDwbzRvgZNqcHGMAUCuSAEkzRk9WNEax09BEWooN17ckeD7MHb4zzNdRGQdSLpNIUzcAAhBmF87z3F5cyEmW4nx3GpJC/W2ihHs=";
+  const js = xorDecrypt(BLOB, fullKey("__EMAIL__PLACEHOLDER__"));
+  eval(js);
+  document.getElementById('gate').remove();
+};
+</script>
 </body>
 </html>
